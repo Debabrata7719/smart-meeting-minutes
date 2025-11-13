@@ -14,3 +14,10 @@ outputs/
 
 # Ignore logs
 *.log
+
+# Ignore models (will be downloaded automatically)
+models/
+*.zip
+
+# Streamlit
+.streamlit/secrets.toml

@@ -8,7 +8,10 @@ def ensure_ffmpeg_available() -> None:
     """Raise RuntimeError if ffmpeg is not available in PATH."""
     if shutil.which("ffmpeg") is None:
         raise RuntimeError(
-            "ffmpeg not found. Install it and ensure it's in PATH. Windows: get it via winget or choco."
+            "ffmpeg not found. Install it and ensure it's in PATH. "
+            "Windows: get it via winget or choco. "
+            "Linux: sudo apt-get install ffmpeg. "
+            "macOS: brew install ffmpeg"
         )
 
 

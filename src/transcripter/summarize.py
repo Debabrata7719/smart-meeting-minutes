@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Dict, List, Any
 
 from transformers import pipeline
 
@@ -37,6 +37,16 @@ def _get_pipeline(model_name: str):
 
 
 def summarize_text(text: str, config: Optional[SummarizationConfig] = None) -> str:
+	"""
+	Generate summary from text (original function for backward compatibility).
+	
+	Args:
+		text: Input text to summarize
+		config: Optional summarization configuration
+		
+	Returns:
+		Summary text string
+	"""
 	if not text or not text.strip():
 		return ""
 	if config is None:
@@ -70,3 +80,44 @@ def summarize_text(text: str, config: Optional[SummarizationConfig] = None) -> s
 			return out2[0]['summary_text']
 
 	return summaries[0] if summaries else ""
+
+
+def process_transcript(transcript: str, config: Optional[SummarizationConfig] = None) -> Dict[str, Any]:
+	"""
+	Process transcript and return structured output with all features.
+	
+	This function generates:
+	- Summary
+	- Action Items
+	- Highlights
+	- Topics
+	
+	Args:
+		transcript: The full transcript text
+		config: Optional summarization configuration
+		
+	Returns:
+		Dictionary with keys: summary, action_items, highlights, topics
+	"""
+	from .action_items import extract_action_items
+	from .highlights import extract_highlights as extract_highlights_func
+	from .topics import extract_topics
+	
+	# Generate summary
+	summary = summarize_text(transcript, config)
+	
+	# Extract action items
+	action_items = extract_action_items(transcript)
+	
+	# Extract highlights
+	highlights = extract_highlights_func(transcript)
+	
+	# Extract topics
+	topics = extract_topics(transcript)
+	
+	return {
+		"summary": summary,
+		"action_items": action_items,
+		"highlights": highlights,
+		"topics": topics
+	}
