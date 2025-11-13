@@ -27,11 +27,7 @@ def convert_to_wav_mono_16k(input_path: str, output_dir: str | Path) -> Path:
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-<<<<<<< HEAD
     out_path = out_dir / f"{in_path.stem}_audio_16k.wav"
-=======
-    out_path = out_dir / f"{in_path.stem}_mono16k.wav"
->>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
 
     cmd = [
         "ffmpeg",

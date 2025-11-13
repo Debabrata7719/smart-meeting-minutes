@@ -1,16 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-<<<<<<< HEAD
 from functools import lru_cache
 from typing import Optional
 
 from transformers import pipeline
-=======
-from typing import Optional
-
-from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
->>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
 
 
 DEFAULT_MODEL = "sshleifer/distilbart-cnn-12-6"
@@ -29,25 +23,17 @@ class SummarizationConfig:
 
 
 def _load_pipeline(model_name: str):
-<<<<<<< HEAD
 	return pipeline(
-=======
-	pipe = pipeline(
->>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
 		"summarization",
 		model=model_name,
 		tokenizer=model_name,
 		device=-1,
 	)
-<<<<<<< HEAD
 
 
 @lru_cache(maxsize=2)
 def _get_pipeline(model_name: str):
 	return _load_pipeline(model_name)
-=======
-	return pipe
->>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
 
 
 def summarize_text(text: str, config: Optional[SummarizationConfig] = None) -> str:
@@ -56,11 +42,7 @@ def summarize_text(text: str, config: Optional[SummarizationConfig] = None) -> s
 	if config is None:
 		config = SummarizationConfig()
 
-<<<<<<< HEAD
 	pipe = _get_pipeline(config.model_name)
-=======
-	pipe = _load_pipeline(config.model_name)
->>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
 
 	max_chars = 3000
 	chunks: list[str] = []

@@ -2,7 +2,4 @@ vosk==0.3.45
 SoundFile==0.12.1
 numpy==2.1.1
 requests>=2.31.0
-<<<<<<< HEAD
 streamlit>=1.28.0
-=======
->>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6

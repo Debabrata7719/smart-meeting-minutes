@@ -1,8 +1,14 @@
 import streamlit as st
 import tempfile
 import os
+import sys
 from pathlib import Path
 import re
+
+# Add the project root to Python path
+project_root = Path(__file__).parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 from src.transcripter.audio import convert_to_wav_mono_16k
 from src.transcripter.stt import transcribe_wav_streaming, transcribe_wav

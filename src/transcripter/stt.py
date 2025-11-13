@@ -2,23 +2,15 @@ from __future__ import annotations
 
 import json
 import os
-<<<<<<< HEAD
 import sys
-import tarfile
 import time
 from pathlib import Path
-from typing import Iterable, Optional, TextIO
-=======
-import tarfile
-from pathlib import Path
-from typing import Iterable, Optional
->>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
+from typing import Optional, TextIO
 
 import requests
 from vosk import KaldiRecognizer, Model
 import soundfile as sf
 
-<<<<<<< HEAD
 # Vosk model URLs for different languages
 VOSK_MODELS = {
 	"en": "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip",
@@ -77,36 +69,10 @@ def _download_and_extract_vosk_model(models_dir: Path, model_url: str) -> Path:
 		sys.stderr.flush()
 	
 	print("Extracting model...")
-=======
-VOSK_MODEL_URL = os.environ.get(
-	"VOSK_MODEL_URL",
-	"https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip",
-)
-
-
-def _download_and_extract_vosk_model(models_dir: Path) -> Path:
-	models_dir.mkdir(parents=True, exist_ok=True)
-	# Determine target folder name from URL
-	model_archive = models_dir / Path(VOSK_MODEL_URL).name
-	model_dir_name = model_archive.stem.replace(".zip", "")
-	model_dir = models_dir / model_dir_name
-	if model_dir.exists():
-		return model_dir
-
-	# Stream download
-	r = requests.get(VOSK_MODEL_URL, stream=True, timeout=60)
-	r.raise_for_status()
-	with open(model_archive, "wb") as f:
-		for chunk in r.iter_content(chunk_size=1024 * 1024):
-			if chunk:
-				f.write(chunk)
-
->>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
 	# Extract zip
 	import zipfile
 	with zipfile.ZipFile(model_archive, 'r') as zf:
 		zf.extractall(models_dir)
-<<<<<<< HEAD
 	
 	# Clean up archive to save space (optional)
 	# model_archive.unlink()
@@ -151,25 +117,6 @@ def transcribe_wav(path_wav: str | Path, model: Optional[Model] = None, language
 	"""
 	if model is None:
 		model = load_vosk_model(language=language)
-=======
-
-	return model_dir
-
-
-def load_vosk_model(models_dir: str | Path = "models") -> Model:
-	models_path = Path(models_dir)
-	model_dir = _download_and_extract_vosk_model(models_path)
-	return Model(str(model_dir))
-
-
-def transcribe_wav(path_wav: str | Path, model: Optional[Model] = None) -> str:
-	"""
-	Transcribe a mono 16kHz WAV file using Vosk.
-	Returns the transcript string.
-	"""
-	if model is None:
-		model = load_vosk_model()
->>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
 
 	# Read audio
 	data, samplerate = sf.read(str(path_wav), dtype='int16')
@@ -198,7 +145,6 @@ def transcribe_wav(path_wav: str | Path, model: Optional[Model] = None) -> str:
 
 	transcript = ' '.join(s.strip() for s in results if s.strip())
 	return transcript.strip()
-<<<<<<< HEAD
 
 
 def transcribe_wav_streaming(
@@ -332,5 +278,3 @@ def transcribe_wav_streaming(
 	# Return full transcript
 	transcript = ' '.join(s.strip() for s in results if s.strip())
 	return transcript.strip()
-=======
->>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
