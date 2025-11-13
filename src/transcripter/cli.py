@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from .audio import convert_to_wav_mono_16k
+<<<<<<< HEAD
 from .stt import transcribe_wav, transcribe_wav_streaming
 
 # Organized keyword categories for better structure
@@ -32,6 +33,16 @@ HIGHLIGHT_KEYWORDS = [kw for keywords in HIGHLIGHT_CATEGORIES.values() for kw in
 _HIGHLIGHT_PATTERN = re.compile(
 	rf"(?i)\b(?:{'|'.join(re.escape(kw) for kw in HIGHLIGHT_KEYWORDS)})\b"
 )
+=======
+from .stt import transcribe_wav
+
+HIGHLIGHT_KEYWORDS = [
+	# Finance / growth / metrics
+	"revenue", "profit", "growth", "market", "sales", "cost", "margin", "roi", "funding",
+	"budget", "forecast", "pipeline", "customers", "users", "churn", "retention", "mrr", "arr",
+	"deal", "contract", "invoice", "pricing", "price", "expansion", "hiring", "headcount",
+]
+>>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -60,6 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
 		action="store_true",
 		help="Only save sentences containing important keywords (money/growth/etc)",
 	)
+<<<<<<< HEAD
 	p.add_argument(
 		"--no-streaming",
 		action="store_false",
@@ -233,12 +245,31 @@ def _extract_highlights(transcript: str) -> str:
 	output_lines.append("=" * 70)
 	
 	return "\n".join(output_lines)
+=======
+	return p
+
+
+def _extract_highlights(transcript: str) -> list[str]:
+	lines = [ln.strip() for ln in transcript.splitlines() if ln.strip()]
+	match_lower = [kw.lower() for kw in HIGHLIGHT_KEYWORDS]
+	hits: list[str] = []
+	for ln in lines:
+		l = ln.lower()
+		if any(kw in l for kw in match_lower):
+			hits.append(ln)
+	return hits
+>>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
 
 
 def _extract_important_sentences(transcript: str) -> list[str]:
 	# Simple sentence split
 	sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", transcript) if s.strip()]
+<<<<<<< HEAD
 	return [s for s in sentences if _HIGHLIGHT_PATTERN.search(s)]
+=======
+	match_lower = [kw.lower() for kw in HIGHLIGHT_KEYWORDS]
+	return [s for s in sentences if any(kw in s.lower() for kw in match_lower)]
+>>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
 
 
 def main() -> None:
@@ -258,6 +289,7 @@ def main() -> None:
 		basename = stem
 	else:
 		wav_path = convert_to_wav_mono_16k(str(input_path), outdir)
+<<<<<<< HEAD
 		basename = input_path.stem
 		
 		# Use efficient streaming transcription if enabled
@@ -289,6 +321,15 @@ def main() -> None:
 		transcript = translated
 	elif args.translate and args.language != "hi":
 		print("Warning: --translate only works with --language hi. Skipping translation.")
+=======
+		transcript = transcribe_wav(wav_path)
+		basename = input_path.stem
+		# Save transcript unless important-only is requested
+		if not args.important_only:
+			transcript_path = outdir / f"{basename}_transcript.txt"
+			transcript_path.write_text(transcript, encoding="utf-8")
+			print(f"Transcript written to: {transcript_path}")
+>>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
 
 	if args.important_only:
 		important = _extract_important_sentences(transcript)
@@ -296,10 +337,17 @@ def main() -> None:
 		print(f"Important-only written to: {outdir / f'{basename}_important.txt'}")
 		return
 
+<<<<<<< HEAD
 	# Highlights (well-structured and categorized)
 	highlights_text = _extract_highlights(transcript)
 	if highlights_text.strip():
 		(outdir / f"{basename}_highlights.txt").write_text(highlights_text, encoding="utf-8")
+=======
+	# Highlights (line-based for transcripts that already contain line breaks)
+	highlights = _extract_highlights(transcript)
+	if highlights:
+		(outdir / f"{basename}_highlights.txt").write_text("\n".join(highlights), encoding="utf-8")
+>>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
 		print(f"Highlights written to: {outdir / f'{basename}_highlights.txt'}")
 
 	# Summary
