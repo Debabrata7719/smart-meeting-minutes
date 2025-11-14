@@ -19,5 +19,10 @@ outputs/
 models/
 *.zip
 
+#Ignore scret files
+.streamlit/secrets.toml
+*.json
+
+
 # Streamlit
 .streamlit/secrets.toml
