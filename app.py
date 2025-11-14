@@ -111,28 +111,34 @@ def verify_token():
     # Check for token in query parameters
     if "id_token" in st.query_params:
         token = st.query_params["id_token"]
-        try:
-            user = auth.verify_id_token(token)
-            st.session_state["user"] = user
-            # Clear the token from URL by setting it to empty
-            # This prevents the token from appearing in the URL
-            st.query_params["id_token"] = ""
-            # Remove it completely if possible
+        if token:  # Make sure token is not empty
             try:
-                # Try to remove the parameter (works in newer Streamlit versions)
-                params_dict = dict(st.query_params)
-                params_dict.pop("id_token", None)
-                st.query_params.clear()
-                for k, v in params_dict.items():
-                    if v:  # Only add non-empty params
-                        st.query_params[k] = v
-            except:
-                # Fallback: just set to empty string
-                pass
-            st.rerun()
-        except Exception as e:
-            st.error(f"Token verification failed: {str(e)}")
-            st.session_state["user"] = None
+                user = auth.verify_id_token(token)
+                st.session_state["user"] = user
+                # Clear the token from URL by setting it to empty
+                # This prevents the token from appearing in the URL
+                st.query_params["id_token"] = ""
+                # Remove it completely if possible
+                try:
+                    # Try to remove the parameter (works in newer Streamlit versions)
+                    params_dict = dict(st.query_params)
+                    params_dict.pop("id_token", None)
+                    st.query_params.clear()
+                    for k, v in params_dict.items():
+                        if v:  # Only add non-empty params
+                            st.query_params[k] = v
+                except:
+                    # Fallback: just set to empty string
+                    pass
+                st.rerun()
+            except Exception as e:
+                error_msg = str(e)
+                st.error(f"❌ Token verification failed: {error_msg}")
+                if "expired" in error_msg.lower():
+                    st.warning("Your session has expired. Please log in again.")
+                elif "invalid" in error_msg.lower():
+                    st.warning("Invalid token. Please try logging in again.")
+                st.session_state["user"] = None
 
 # -----------------------------
 # 5. GOOGLE LOGIN COMPONENT
@@ -204,70 +210,134 @@ def google_login_button():
             function setupAuth() {{
                 const auth = targetWindow.firebase.auth();
                 
-                // Handle redirect result
+                // Handle redirect result - this runs when user returns from Google
+                console.log('Setting up redirect result handler...');
                 auth.getRedirectResult()
                     .then(async (result) => {{
-                        console.log('Redirect result:', result);
+                        console.log('=== REDIRECT RESULT RECEIVED ===', result);
                         if (result.user) {{
-                            const token = await result.user.getIdToken();
-                            const currentUrl = new URL(targetWindow.location.href);
-                            currentUrl.searchParams.set('id_token', token);
-                            targetWindow.location.href = currentUrl.toString();
+                            console.log('✅ User found in redirect result:', result.user.email);
+                            try {{
+                                const token = await result.user.getIdToken();
+                                console.log('✅ Token obtained, length:', token.length);
+                                
+                                // Get the current URL and add token
+                                const currentUrl = new URL(targetWindow.location.href);
+                                currentUrl.searchParams.set('id_token', token);
+                                console.log('Redirecting to URL with token:', currentUrl.toString());
+                                
+                                // Force a full page reload to the new URL
+                                targetWindow.location.replace(currentUrl.toString());
+                            }} catch (tokenError) {{
+                                console.error('Error getting token:', tokenError);
+                                alert('Failed to get authentication token: ' + tokenError.message);
+                            }}
+                        }} else {{
+                            console.log('ℹ️ No user in redirect result - checking URL params...');
+                            // Check if token is already in URL (might have been added by another handler)
+                            const urlParams = new URLSearchParams(targetWindow.location.search);
+                            if (urlParams.has('id_token')) {{
+                                console.log('Token already in URL, page should reload');
+                            }}
                         }}
                     }})
                     .catch((error) => {{
-                        if (error.code && !['auth/popup-closed-by-user'].includes(error.code)) {{
-                            console.error('Redirect result error:', error);
+                        console.error('❌ Redirect result error:', error);
+                        if (error.code) {{
+                            console.error('Error code:', error.code);
+                            console.error('Error message:', error.message);
+                            if (error.code === 'auth/unauthorized-domain') {{
+                                alert('⚠️ Your domain is not authorized in Firebase! Please add your Streamlit URL to Firebase authorized domains.');
+                            }} else if (error.code === 'auth/operation-not-allowed') {{
+                                alert('⚠️ Google Sign-In is not enabled in Firebase!');
+                            }} else if (!['auth/popup-closed-by-user'].includes(error.code)) {{
+                                alert('Login error: ' + error.message);
+                            }}
                         }}
                     }});
                 
                 // Setup button
-                document.getElementById('googleLoginBtn').addEventListener('click', function() {{
-                    const provider = new targetWindow.firebase.auth.GoogleAuthProvider();
-                    auth.signInWithRedirect(provider)
-                        .catch((error) => {{
-                            console.error('Redirect error:', error);
-                            alert('Login failed: ' + error.message);
-                        }});
-                }});
+                const btn = document.getElementById('googleLoginBtn');
+                if (btn) {{
+                    btn.addEventListener('click', function() {{
+                        console.log('Login button clicked');
+                        const provider = new targetWindow.firebase.auth.GoogleAuthProvider();
+                        auth.signInWithRedirect(provider)
+                            .then(() => {{
+                                console.log('Redirect initiated successfully');
+                            }})
+                            .catch((error) => {{
+                                console.error('Redirect error:', error);
+                                alert('Login failed: ' + error.message);
+                            }});
+                    }});
+                }}
             }}
             
             function setupAuthCurrent() {{
                 const auth = firebase.auth();
                 
+                console.log('Setting up auth in current window (fallback)...');
                 auth.getRedirectResult()
                     .then(async (result) => {{
+                        console.log('Redirect result (current window):', result);
                         if (result.user) {{
                             const token = await result.user.getIdToken();
                             const currentUrl = new URL(window.location.href);
                             currentUrl.searchParams.set('id_token', token);
-                            window.top.location.href = currentUrl.toString();
+                            console.log('Redirecting parent window to:', currentUrl.toString());
+                            window.top.location.replace(currentUrl.toString());
                         }}
                     }})
                     .catch((error) => {{
+                        console.error('Redirect result error (current):', error);
                         if (error.code && !['auth/popup-closed-by-user'].includes(error.code)) {{
-                            console.error('Redirect result error:', error);
+                            alert('Login error: ' + error.message);
                         }}
                     }});
                 
-                document.getElementById('googleLoginBtn').addEventListener('click', function() {{
-                    const provider = new firebase.auth.GoogleAuthProvider();
-                    auth.signInWithRedirect(provider)
-                        .catch((error) => {{
-                            console.error('Redirect error:', error);
-                            alert('Login failed: ' + error.message);
-                        }});
-                }});
+                const btn = document.getElementById('googleLoginBtn');
+                if (btn) {{
+                    btn.addEventListener('click', function() {{
+                        const provider = new firebase.auth.GoogleAuthProvider();
+                        auth.signInWithRedirect(provider)
+                            .catch((error) => {{
+                                console.error('Redirect error:', error);
+                                alert('Login failed: ' + error.message);
+                            }});
+                    }});
+                }}
             }}
             
             // Wait for Firebase to load, then initialize
-            if (typeof firebase !== 'undefined') {{
-                initFirebase();
-            }} else {{
-                window.addEventListener('load', function() {{
-                    setTimeout(initFirebase, 500);
-                }});
+            // This runs immediately and also on page load
+            function startAuth() {{
+                if (typeof firebase !== 'undefined') {{
+                    console.log('Firebase is available, initializing...');
+                    initFirebase();
+                }} else {{
+                    console.log('Waiting for Firebase to load...');
+                    setTimeout(function() {{
+                        if (typeof firebase !== 'undefined') {{
+                            initFirebase();
+                        }} else {{
+                            console.error('Firebase failed to load after timeout');
+                        }}
+                    }}, 1000);
+                }}
             }}
+            
+            // Run immediately
+            startAuth();
+            
+            // Also run on page load (important for redirect returns)
+            window.addEventListener('load', function() {{
+                console.log('Page loaded, checking for redirect result...');
+                setTimeout(startAuth, 100);
+            }});
+            
+            // Run again after a short delay to catch redirect returns
+            setTimeout(startAuth, 500);
         </script>
     </body>
     </html>
