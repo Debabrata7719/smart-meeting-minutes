@@ -100,38 +100,63 @@ def google_login_button():
     # Inject Firebase scripts and auth logic directly into the page (not in iframe)
     firebase_config_json = json.dumps(firebase_config)
     
-    # Load Firebase scripts in the main page context
-    if "firebase_scripts_loaded" not in st.session_state:
-        st.session_state["firebase_scripts_loaded"] = True
-        st.markdown(f"""
-        <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-        <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-        <script>
-            // Initialize Firebase in the main window context
-            const firebaseConfig = {firebase_config_json};
-            if (typeof firebase !== 'undefined' && !firebase.apps.length) {{
-                firebase.initializeApp(firebaseConfig);
-            }}
-            
-            // Handle redirect result on page load
-            if (typeof firebase !== 'undefined') {{
-                firebase.auth().getRedirectResult()
+    # Always load scripts and handle redirect - this ensures it works on every page load
+    st.markdown(f"""
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script>
+        (function() {{
+            // Wait for Firebase to load
+            function initFirebase() {{
+                if (typeof firebase === 'undefined') {{
+                    setTimeout(initFirebase, 100);
+                    return;
+                }}
+                
+                const firebaseConfig = {firebase_config_json};
+                
+                // Initialize Firebase only if not already initialized
+                if (!firebase.apps.length) {{
+                    firebase.initializeApp(firebaseConfig);
+                }}
+                
+                const auth = firebase.auth();
+                
+                // Handle redirect result on EVERY page load (critical for redirect flow)
+                auth.getRedirectResult()
                     .then(async (result) => {{
+                        console.log('Redirect result:', result);
                         if (result.user) {{
+                            console.log('User authenticated:', result.user.email);
                             const token = await result.user.getIdToken();
+                            console.log('Got token, redirecting...');
+                            
+                            // Add token to URL and reload
                             const currentUrl = new URL(window.location.href);
                             currentUrl.searchParams.set('id_token', token);
                             window.location.href = currentUrl.toString();
+                        }} else {{
+                            console.log('No user in redirect result');
                         }}
                     }})
                     .catch((error) => {{
-                        if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {{
-                            console.error("Redirect result error:", error);
+                        console.error("Redirect result error:", error);
+                        // Don't show alert for expected errors
+                        if (error.code && !['auth/popup-closed-by-user', 'auth/cancelled-popup-request'].includes(error.code)) {{
+                            console.error("Unexpected auth error:", error);
                         }}
                     }});
             }}
-        </script>
-        """, unsafe_allow_html=True)
+            
+            // Start initialization
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', initFirebase);
+            }} else {{
+                initFirebase();
+            }}
+        }})();
+    </script>
+    """, unsafe_allow_html=True)
     
     # Create the login button
     st.markdown("""
@@ -147,6 +172,7 @@ def google_login_button():
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             width: 100%;
             max-width: 300px;
+            margin: 10px 0;
         }
         .google-login-btn:hover {
             background: #357ae8;
@@ -156,19 +182,43 @@ def google_login_button():
         🔐 Sign in with Google
     </button>
     <script>
-        document.getElementById('googleLoginBtn').addEventListener('click', function() {
-            if (typeof firebase === 'undefined') {
-                alert('Firebase is loading, please wait a moment and try again.');
-                return;
-            }
+        (function() {{
+            function setupButton() {{
+                const btn = document.getElementById('googleLoginBtn');
+                if (!btn) {{
+                    setTimeout(setupButton, 100);
+                    return;
+                }}
+                
+                // Remove any existing listeners
+                const newBtn = btn.cloneNode(true);
+                btn.parentNode.replaceChild(newBtn, btn);
+                
+                newBtn.addEventListener('click', function() {{
+                    if (typeof firebase === 'undefined') {{
+                        alert('Firebase is loading, please wait a moment and try again.');
+                        return;
+                    }}
+                    
+                    console.log('Login button clicked, initiating redirect...');
+                    const provider = new firebase.auth.GoogleAuthProvider();
+                    firebase.auth().signInWithRedirect(provider)
+                        .then(() => {{
+                            console.log('Redirect initiated');
+                        }})
+                        .catch((error) => {{
+                            console.error("Redirect error:", error);
+                            alert("Login failed: " + error.message);
+                        }});
+                }});
+            }}
             
-            const provider = new firebase.auth.GoogleAuthProvider();
-            firebase.auth().signInWithRedirect(provider)
-                .catch((error) => {
-                    console.error("Redirect error:", error);
-                    alert("Login failed: " + error.message);
-                });
-        });
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', setupButton);
+            }} else {{
+                setupButton();
+            }}
+        }})();
     </script>
     """, unsafe_allow_html=True)
 
@@ -210,8 +260,24 @@ if st.session_state["user"] is None:
     
     # Debug info (can be removed in production)
     if st.checkbox("Show debug info"):
-        st.write("Query params:", dict(st.query_params))
-        st.write("Session state keys:", list(st.session_state.keys()))
+        st.write("**Query params:**", dict(st.query_params))
+        st.write("**Session state keys:**", list(st.session_state.keys()))
+        st.write("**Current URL:**", st.get_option("server.headless"))
+        
+        st.markdown("""
+        <script>
+            console.log('Current URL:', window.location.href);
+            console.log('Query params:', new URLSearchParams(window.location.search).toString());
+        </script>
+        """, unsafe_allow_html=True)
+        
+        st.info("""
+        **Troubleshooting:**
+        - Check browser console (F12) for Firebase logs
+        - Make sure your Streamlit URL is in Firebase Authorized domains
+        - Verify Google Sign-In is enabled in Firebase Console
+        - Check that redirect URIs are configured correctly
+        """)
     
     st.stop()
 
