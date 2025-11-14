@@ -147,75 +147,119 @@ def google_login_button():
     unique_key = int(time.time() * 1000)
     
     st.markdown(f"""
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script>
-        console.log('Firebase scripts loading...');
+        console.log('=== FIREBASE AUTH SCRIPT STARTING ===');
+        
+        // Load Firebase scripts dynamically
+        function loadFirebaseScripts() {{
+            return new Promise((resolve, reject) => {{
+                if (window.firebase && window.firebase.apps) {{
+                    console.log('Firebase already loaded');
+                    resolve();
+                    return;
+                }}
+                
+                console.log('Loading Firebase scripts...');
+                const script1 = document.createElement('script');
+                script1.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
+                script1.onload = function() {{
+                    console.log('Firebase app script loaded');
+                    const script2 = document.createElement('script');
+                    script2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js';
+                    script2.onload = function() {{
+                        console.log('Firebase auth script loaded');
+                        resolve();
+                    }};
+                    script2.onerror = function() {{
+                        console.error('Failed to load Firebase auth script');
+                        reject(new Error('Failed to load Firebase auth'));
+                    }};
+                    document.head.appendChild(script2);
+                }};
+                script1.onerror = function() {{
+                    console.error('Failed to load Firebase app script');
+                    reject(new Error('Failed to load Firebase app'));
+                }};
+                document.head.appendChild(script1);
+            }});
+        }}
         
         // Function to handle redirect result
-        function handleRedirectResult() {{
-            if (typeof firebase === 'undefined') {{
-                console.log('Firebase not loaded yet, retrying...');
-                setTimeout(handleRedirectResult, 200);
-                return;
-            }}
-            
+        async function handleRedirectResult() {{
             try {{
+                // Wait for Firebase to load
+                await loadFirebaseScripts();
+                
+                if (typeof firebase === 'undefined') {{
+                    console.error('Firebase is still undefined after loading scripts!');
+                    return;
+                }}
+                
                 const firebaseConfig = {firebase_config_json};
+                console.log('Firebase config:', firebaseConfig);
                 
                 // Initialize Firebase only if not already initialized
                 if (!firebase.apps.length) {{
-                    console.log('Initializing Firebase...');
+                    console.log('Initializing Firebase with config...');
                     firebase.initializeApp(firebaseConfig);
+                    console.log('Firebase initialized successfully');
+                }} else {{
+                    console.log('Firebase already initialized');
                 }}
                 
                 const auth = firebase.auth();
-                console.log('Checking for redirect result...');
+                console.log('=== Checking for redirect result ===');
                 
                 // Handle redirect result on EVERY page load (critical for redirect flow)
-                auth.getRedirectResult()
-                    .then(async (result) => {{
-                        console.log('Redirect result received:', result);
-                        if (result.user) {{
-                            console.log('User authenticated:', result.user.email);
-                            const token = await result.user.getIdToken();
-                            console.log('Got token, adding to URL...');
-                            
-                            // Add token to URL and reload
-                            const currentUrl = new URL(window.location.href);
-                            currentUrl.searchParams.set('id_token', token);
-                            console.log('Redirecting to:', currentUrl.toString());
-                            window.location.href = currentUrl.toString();
-                        }} else {{
-                            console.log('No user in redirect result - user may not have completed login yet');
-                        }}
-                    }})
-                    .catch((error) => {{
-                        console.error("Redirect result error:", error);
-                        // Only log unexpected errors
-                        if (error.code) {{
-                            if (!['auth/popup-closed-by-user', 'auth/cancelled-popup-request'].includes(error.code)) {{
-                                console.error("Unexpected auth error code:", error.code, error.message);
-                            }}
-                        }} else {{
-                            console.error("Error details:", error);
-                        }}
-                    }});
+                const result = await auth.getRedirectResult();
+                console.log('Redirect result received:', result);
+                
+                if (result.user) {{
+                    console.log('✅ User authenticated:', result.user.email);
+                    const token = await result.user.getIdToken();
+                    console.log('✅ Got token, adding to URL...');
+                    
+                    // Add token to URL and reload
+                    const currentUrl = new URL(window.location.href);
+                    currentUrl.searchParams.set('id_token', token);
+                    console.log('Redirecting to:', currentUrl.toString());
+                    window.location.href = currentUrl.toString();
+                }} else {{
+                    console.log('ℹ️ No user in redirect result - user may not have completed login yet');
+                }}
             }} catch (error) {{
-                console.error("Error in handleRedirectResult:", error);
+                console.error("❌ Error in handleRedirectResult:", error);
+                if (error.code) {{
+                    console.error("Error code:", error.code);
+                    console.error("Error message:", error.message);
+                    if (error.code === 'auth/unauthorized-domain') {{
+                        console.error("⚠️ Your domain is not authorized in Firebase!");
+                    }} else if (error.code === 'auth/operation-not-allowed') {{
+                        console.error("⚠️ Google Sign-In is not enabled in Firebase!");
+                    }}
+                }}
             }}
         }}
         
-        // Start handling redirect immediately
+        // Start handling redirect when page loads
+        console.log('Setting up redirect handler...');
         if (document.readyState === 'loading') {{
-            document.addEventListener('DOMContentLoaded', handleRedirectResult);
+            document.addEventListener('DOMContentLoaded', function() {{
+                console.log('DOM loaded, starting redirect handler...');
+                handleRedirectResult();
+            }});
         }} else {{
-            // Run immediately if DOM is already loaded
+            console.log('DOM already loaded, starting redirect handler immediately...');
             handleRedirectResult();
         }}
         
-        // Also try after a short delay to catch late-loading scripts
-        setTimeout(handleRedirectResult, 500);
+        // Also try after a delay to catch any edge cases
+        setTimeout(function() {{
+            console.log('Retrying redirect handler after delay...');
+            handleRedirectResult();
+        }}, 1000);
+        
+        console.log('=== FIREBASE AUTH SCRIPT LOADED ===');
     </script>
     """, unsafe_allow_html=True)
     
@@ -375,10 +419,10 @@ if st.session_state["user"] is None:
         
         # Add a test button to check Firebase
         st.markdown("""
-        <button id="testFirebase" style="padding:10px;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;cursor:pointer;">
+        <button id="testFirebase" style="padding:10px;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;cursor:pointer;margin:5px;">
             Test Firebase Connection
         </button>
-        <div id="testResult"></div>
+        <div id="testResult" style="margin:10px 0;"></div>
         <script>
             document.getElementById('testFirebase').addEventListener('click', function() {
                 const resultDiv = document.getElementById('testResult');
@@ -386,20 +430,58 @@ if st.session_state["user"] is None:
                 
                 setTimeout(function() {
                     if (typeof firebase === 'undefined') {
-                        resultDiv.innerHTML = '<p style="color: red;">❌ Firebase is not loaded</p>';
+                        resultDiv.innerHTML = '<p style="color: red;">❌ Firebase is not loaded</p>' +
+                            '<p>Make sure scripts are loading. Check browser console (F12) for errors.</p>';
                     } else {
                         try {
                             const auth = firebase.auth();
-                            resultDiv.innerHTML = '<p style="color: green;">✅ Firebase is loaded and ready</p>';
+                            const config = firebase.app().options;
+                            resultDiv.innerHTML = '<p style="color: green;">✅ Firebase is loaded and ready</p>' +
+                                '<p><strong>Auth Domain:</strong> ' + config.authDomain + '</p>' +
+                                '<p><strong>Project ID:</strong> ' + config.projectId + '</p>';
                             console.log('Firebase auth object:', auth);
+                            console.log('Firebase config:', config);
                         } catch (e) {
                             resultDiv.innerHTML = '<p style="color: orange;">⚠️ Firebase loaded but error: ' + e.message + '</p>';
                         }
                     }
                 }, 500);
             });
+            
+            // Log all console messages to help debug
+            const originalLog = console.log;
+            const originalError = console.error;
+            const logs = [];
+            
+            console.log = function(...args) {
+                logs.push({type: 'log', message: args.join(' '), time: new Date().toISOString()});
+                originalLog.apply(console, args);
+            };
+            
+            console.error = function(...args) {
+                logs.push({type: 'error', message: args.join(' '), time: new Date().toISOString()});
+                originalError.apply(console, args);
+            };
+            
+            // Store logs in window for debugging
+            window.firebaseLogs = logs;
         </script>
         """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        st.warning("""
+        **🔍 Important: Check Browser Console**
+        
+        Please open your browser's Developer Tools (press F12) and check the Console tab for:
+        - Any error messages (in red)
+        - Firebase loading messages
+        - Redirect result messages
+        
+        **Common Issues:**
+        - If you see "auth/unauthorized-domain": Your Streamlit URL is not in Firebase authorized domains
+        - If you see "auth/operation-not-allowed": Google Sign-In is not enabled in Firebase
+        - If you see no redirect result: The redirect URL might not be configured correctly
+        """)
     
     st.stop()
 
