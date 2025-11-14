@@ -67,16 +67,27 @@ if "user" not in st.session_state:
 # 4. VERIFY LOGIN TOKEN
 # -----------------------------
 def verify_token():
-    # Use the new query_params method
-    query = st.query_params
-    
-    if "id_token" in query:
-        token = query["id_token"]
+    # Check for token in query parameters
+    if "id_token" in st.query_params:
+        token = st.query_params["id_token"]
         try:
             user = auth.verify_id_token(token)
             st.session_state["user"] = user
-            # Clear the token from URL
-            st.query_params.clear()
+            # Clear the token from URL by setting it to empty
+            # This prevents the token from appearing in the URL
+            st.query_params["id_token"] = ""
+            # Remove it completely if possible
+            try:
+                # Try to remove the parameter (works in newer Streamlit versions)
+                params_dict = dict(st.query_params)
+                params_dict.pop("id_token", None)
+                st.query_params.clear()
+                for k, v in params_dict.items():
+                    if v:  # Only add non-empty params
+                        st.query_params[k] = v
+            except:
+                # Fallback: just set to empty string
+                pass
             st.rerun()
         except Exception as e:
             st.error(f"Token verification failed: {str(e)}")
@@ -112,10 +123,30 @@ def google_login_button():
             }}
             
             const auth = firebase.auth();
+            
+            // Handle the redirect result on page load (in case user is returning from Google OAuth)
+            auth.getRedirectResult()
+                .then(async (result) => {{
+                    if (result.user) {{
+                        const token = await result.user.getIdToken();
+                        
+                        // Redirect with token
+                        const currentUrl = new URL(window.location.href);
+                        currentUrl.searchParams.set('id_token', token);
+                        window.location.href = currentUrl.toString();
+                    }}
+                }})
+                .catch((error) => {{
+                    // Only show error if it's not a user cancellation
+                    if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {{
+                        console.error("Redirect result error:", error);
+                    }}
+                }});
 
             document.getElementById('googleLoginBtn').addEventListener('click', function() {{
                 const provider = new firebase.auth.GoogleAuthProvider();
                 
+                // Try popup first (better UX), fallback to redirect if blocked
                 auth.signInWithPopup(provider)
                     .then(async (result) => {{
                         const token = await result.user.getIdToken();
@@ -126,8 +157,17 @@ def google_login_button():
                         window.location.href = currentUrl.toString();
                     }})
                     .catch((error) => {{
-                        console.error("Login error:", error);
-                        alert("Login failed: " + error.message);
+                        // If popup is blocked, use redirect
+                        if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {{
+                            auth.signInWithRedirect(provider)
+                                .catch((redirectError) => {{
+                                    console.error("Redirect error:", redirectError);
+                                    alert("Login failed: " + redirectError.message);
+                                }});
+                        }} else {{
+                            console.error("Login error:", error);
+                            alert("Login failed: " + error.message);
+                        }}
                     }});
             }});
         </script>
@@ -141,6 +181,8 @@ def google_login_button():
 # -----------------------------
 def logout():
     st.session_state["user"] = None
+    # Clear all query parameters
+    params = dict(st.query_params)
     st.query_params.clear()
     st.rerun()
 
@@ -155,7 +197,23 @@ verify_token()
 if st.session_state["user"] is None:
     st.title("🔐 Login Required")
     st.write("Please sign in to use Smart Meeting Minutes.")
+    
+    # Show helpful information
+    with st.expander("ℹ️ Login Instructions"):
+        st.write("""
+        1. Click the "Sign in with Google" button below
+        2. If a popup is blocked, allow popups for this site and try again
+        3. Complete the Google sign-in process
+        4. You will be redirected back automatically
+        """)
+    
     google_login_button()
+    
+    # Debug info (can be removed in production)
+    if st.checkbox("Show debug info"):
+        st.write("Query params:", dict(st.query_params))
+        st.write("Session state keys:", list(st.session_state.keys()))
+    
     st.stop()
 
 # If logged in:
