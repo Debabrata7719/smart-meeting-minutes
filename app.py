@@ -360,7 +360,95 @@ def logout():
 # 7. MAIN LOGIC
 # -----------------------------
 
+# Inject redirect handler in main window (runs on every page load)
+# This ensures we catch the redirect result when user returns from Google
+firebase_config_json = json.dumps(firebase_config)
+st.markdown(f"""
+<script>
+    // This script runs in the main window to catch redirect results
+    (function() {{
+        console.log('=== MAIN WINDOW REDIRECT HANDLER ===');
+        
+        // Load Firebase if not already loaded
+        function loadFirebase() {{
+            return new Promise((resolve) => {{
+                if (window.firebase && window.firebase.apps) {{
+                    resolve();
+                    return;
+                }}
+                
+                const script1 = document.createElement('script');
+                script1.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
+                script1.onload = function() {{
+                    const script2 = document.createElement('script');
+                    script2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js';
+                    script2.onload = resolve;
+                    document.head.appendChild(script2);
+                }};
+                document.head.appendChild(script1);
+            }});
+        }}
+        
+        // Handle redirect result
+        async function checkRedirectResult() {{
+            try {{
+                await loadFirebase();
+                
+                if (!window.firebase) {{
+                    console.log('Firebase not available yet');
+                    return;
+                }}
+                
+                const firebaseConfig = {firebase_config_json};
+                
+                // Initialize if needed
+                if (!window.firebase.apps.length) {{
+                    window.firebase.initializeApp(firebaseConfig);
+                }}
+                
+                const auth = window.firebase.auth();
+                const result = await auth.getRedirectResult();
+                
+                console.log('Main window redirect result:', result);
+                
+                if (result.user) {{
+                    console.log('✅ User authenticated in main window:', result.user.email);
+                    const token = await result.user.getIdToken();
+                    console.log('✅ Got token, adding to URL...');
+                    
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('id_token', token);
+                    console.log('Redirecting to:', url.toString());
+                    window.location.replace(url.toString());
+                }}
+            }} catch (error) {{
+                console.error('Error in main window redirect handler:', error);
+            }}
+        }}
+        
+        // Run on page load
+        if (document.readyState === 'loading') {{
+            document.addEventListener('DOMContentLoaded', checkRedirectResult);
+        }} else {{
+            checkRedirectResult();
+        }}
+        
+        // Also try after delay
+        setTimeout(checkRedirectResult, 1000);
+    }})();
+</script>
+""", unsafe_allow_html=True)
+
 # Check for token in URL on page load
+# Also check for Firebase auth parameters in URL
+if "id_token" not in st.query_params:
+    # Check if there are any Firebase-related params that might indicate a redirect
+    url_params = dict(st.query_params)
+    # Firebase sometimes adds these params on redirect
+    if any(key.startswith('firebase') or 'auth' in key.lower() for key in url_params.keys()):
+        st.info("🔍 Detected Firebase redirect parameters. Processing...")
+        st.rerun()
+
 verify_token()
 
 # Check if user is logged in
@@ -408,20 +496,16 @@ if st.session_state["user"] is None:
     **Quick Test:** If login still doesn't work, try this:
     1. Open browser console (F12) before clicking login
     2. Look for any red error messages
-    3. Check if you see "=== FIREBASE AUTH SCRIPT STARTING ===" in console
-    4. If you don't see Firebase logs, the scripts aren't loading
+    3. Check if you see "=== MAIN WINDOW REDIRECT HANDLER ===" in console
+    4. After Google redirect, look for "Main window redirect result:" in console
+    5. Check the URL - does it have `?id_token=...` after redirect?
     """)
     
-    # Simple JavaScript test
-    st.markdown("""
-    <div id="js-test" style="padding:10px;background:#e8f5e9;border-radius:5px;margin:10px 0;">
-        <strong>JavaScript Test:</strong> <span id="js-result">Testing...</span>
-    </div>
-    <script>
-        document.getElementById('js-result').textContent = '✅ JavaScript is working!';
-        console.log('✅ JavaScript test passed - scripts are executing');
-    </script>
-    """, unsafe_allow_html=True)
+    # Show current URL status
+    if "id_token" in st.query_params:
+        st.success("✅ Token detected in URL! Verifying...")
+    else:
+        st.info("ℹ️ No token in URL yet. After Google login, the token should appear here.")
     
     google_login_button()
     
