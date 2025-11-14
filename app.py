@@ -66,37 +66,35 @@ APP_URL = "https://smart-meeting-minutes.streamlit.app/"
 # -----------------------------
 def google_login_button():
     login_html = f"""
-    <html>
-        <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-        <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 
-        <script>
-            const firebaseConfig = {json.dumps(firebase_config)};
-            firebase.initializeApp(firebaseConfig);
-            const auth = firebase.auth();
+    <script>
+        const firebaseConfig = {json.dumps(firebase_config)};
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
 
-            function googleLogin() {{
-                const provider = new firebase.auth.GoogleAuthProvider();
-                auth.signInWithPopup(provider).then(async (result) => {{
-                    const token = await result.user.getIdToken();
-                    const params = new URLSearchParams();
-                    params.set("id_token", token);
+        function googleLogin() {{
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider).then(async (result) => {{
+                const token = await result.user.getIdToken();
+                const params = new URLSearchParams();
+                params.set("id_token", token);
 
-                    // This works on local + deployed
-                    window.location.href = window.location.origin + "?" + params.toString();
-                }});
-            }}
-        </script>
+                // Redirect to same domain (local or Streamlit Cloud)
+                window.location.href = window.location.origin + "/?" + params.toString();
+            }});
+        }}
+    </script>
 
-        <button onclick="googleLogin()"
-            style="padding:15px 25px;font-size:20px;border:none;background:#4285F4;color:white;border-radius:8px;cursor:pointer;">
-            🔐 Sign in with Google
-        </button>
-    </html>
+    <button onclick="googleLogin()"
+        style="padding:15px 25px;font-size:20px;border:none;background:#4285F4;color:white;border-radius:8px;cursor:pointer;">
+        🔐 Sign in with Google
+    </button>
     """
     st.markdown(login_html, unsafe_allow_html=True)
 
-
+    
 # -----------------------------
 # 4. VERIFY LOGIN TOKEN
 # -----------------------------
