@@ -2,7 +2,6 @@ import streamlit as st
 import json, os
 from firebase_admin import credentials, auth, firestore
 import firebase_admin
-import os
 import requests
 import zipfile
 
@@ -59,77 +58,121 @@ firebase_config = {
 }
 
 # -----------------------------
-# 3. GOOGLE LOGIN HTML
+# 3. INITIALIZE SESSION STATE
 # -----------------------------
-def google_login_button():
-    st.markdown("""
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-    """, unsafe_allow_html=True)
-
-    login_html = f"""
-        <script>
-            const firebaseConfig = {json.dumps(firebase_config)};
-            if (!firebase.apps.length) {{
-                firebase.initializeApp(firebaseConfig);
-            }}
-            const auth = firebase.auth();
-
-            function googleLogin() {{
-                const provider = new firebase.auth.GoogleAuthProvider();
-                auth.signInWithPopup(provider).then(async (result) => {{
-                    const token = await result.user.getIdToken();
-                    const params = new URLSearchParams();
-                    params.set("id_token", token);
-
-                    // Redirect properly on Streamlit
-                    window.location.href = window.location.origin + "/?" + params.toString();
-                }}).catch((err) => {{
-                    alert("Login failed: " + err.message);
-                }});
-            }}
-        </script>
-
-        <button onclick="googleLogin()"
-            style="padding:15px 25px;font-size:20px;border:none;background:#4285F4;color:white;border-radius:8px;cursor:pointer;">
-            🔐 Sign in with Google
-        </button>
-    """
-    st.markdown(login_html, unsafe_allow_html=True)
+if "user" not in st.session_state:
+    st.session_state["user"] = None
 
 # -----------------------------
 # 4. VERIFY LOGIN TOKEN
 # -----------------------------
 def verify_token():
-    query = st.experimental_get_query_params()
-
+    # Use the new query_params method
+    query = st.query_params
+    
     if "id_token" in query:
-        token = query["id_token"][0]
+        token = query["id_token"]
         try:
             user = auth.verify_id_token(token)
-            return user
+            st.session_state["user"] = user
+            # Clear the token from URL
+            st.query_params.clear()
+            st.rerun()
         except Exception as e:
-            st.error("Token verification failed: " + str(e))
-            return None
-
-    return None
+            st.error(f"Token verification failed: {str(e)}")
+            st.session_state["user"] = None
 
 # -----------------------------
-# 5. MAIN LOGIC
+# 5. GOOGLE LOGIN COMPONENT
 # -----------------------------
-user = verify_token()
+def google_login_button():
+    # Load Firebase scripts in the head only once
+    if "firebase_loaded" not in st.session_state:
+        st.session_state["firebase_loaded"] = True
+    
+    login_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    </head>
+    <body>
+        <button id="googleLoginBtn"
+            style="padding:15px 25px;font-size:20px;border:none;background:#4285F4;color:white;border-radius:8px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);">
+            🔐 Sign in with Google
+        </button>
 
-if user is None:
+        <script>
+            const firebaseConfig = {json.dumps(firebase_config)};
+            
+            // Initialize Firebase only if not already initialized
+            if (!firebase.apps.length) {{
+                firebase.initializeApp(firebaseConfig);
+            }}
+            
+            const auth = firebase.auth();
+
+            document.getElementById('googleLoginBtn').addEventListener('click', function() {{
+                const provider = new firebase.auth.GoogleAuthProvider();
+                
+                auth.signInWithPopup(provider)
+                    .then(async (result) => {{
+                        const token = await result.user.getIdToken();
+                        
+                        // Redirect with token
+                        const currentUrl = new URL(window.location.href);
+                        currentUrl.searchParams.set('id_token', token);
+                        window.location.href = currentUrl.toString();
+                    }})
+                    .catch((error) => {{
+                        console.error("Login error:", error);
+                        alert("Login failed: " + error.message);
+                    }});
+            }});
+        </script>
+    </body>
+    </html>
+    """
+    st.components.v1.html(login_html, height=100)
+
+# -----------------------------
+# 6. LOGOUT FUNCTION
+# -----------------------------
+def logout():
+    st.session_state["user"] = None
+    st.query_params.clear()
+    st.rerun()
+
+# -----------------------------
+# 7. MAIN LOGIC
+# -----------------------------
+
+# Check for token in URL on page load
+verify_token()
+
+# Check if user is logged in
+if st.session_state["user"] is None:
     st.title("🔐 Login Required")
     st.write("Please sign in to use Smart Meeting Minutes.")
     google_login_button()
     st.stop()
 
 # If logged in:
+user = st.session_state["user"]
+
 st.success(f"Welcome {user.get('email')} 👋")
+
+# Logout button
+if st.button("🚪 Logout"):
+    logout()
 
 # Example Home Page
 st.header("🎤 Smart Meeting Minutes – Logged in")
 st.write("You are now authenticated with Google & Firebase!")
 
 st.write("Now you can continue building your actual features (upload video, summarize, etc.) here.")
+
+# Display user info
+with st.expander("👤 User Details"):
+    st.json(user)
