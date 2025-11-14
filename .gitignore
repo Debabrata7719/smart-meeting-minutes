@@ -26,3 +26,7 @@ models/
 
 # Streamlit
 .streamlit/secrets.toml
+
+Example video/
+*.zip
+
