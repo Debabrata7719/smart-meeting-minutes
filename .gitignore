@@ -15,18 +15,13 @@ outputs/
 # Ignore logs
 *.log
 
-# Ignore models (will be downloaded automatically)
-models/
-*.zip
-
-#Ignore scret files
-.streamlit/secrets.toml
-*.json
-
-
-# Streamlit
-.streamlit/secrets.toml
-
+# Ignore large example videos
 Example video/
-*.zip
+Example video/*.zip
 
+# Ignore secret files
+.streamlit/secrets.toml
+
+# Ignore general JSON secrets
+*secret*.json
+*.json
