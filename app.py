@@ -7,44 +7,60 @@ import zipfile
 
 st.set_page_config(page_title="Smart Meeting Minutes", page_icon="🎤")
 
-MODEL_DIR = "models/vosk"
+# The model extracts to "vosk-model-small-en-us-0.15" not "vosk"
+MODEL_DIR = "models/vosk-model-small-en-us-0.15"
 
+# Check if model needs to be downloaded (only show message, don't block)
 if not os.path.exists(MODEL_DIR):
-    try:
-        url = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
-        zip_path = "vosk.zip"
-        
-        # Create models directory if it doesn't exist
-        os.makedirs("models", exist_ok=True)
-        
-        # Download the model
-        st.info("Downloading Vosk model (this may take a moment)...")
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()  # Raise an error for bad status codes
-        
-        # Write the zip file
-        with open(zip_path, "wb") as f:
-            f.write(response.content)
-        
-        # Verify the file exists and has content
-        if not os.path.exists(zip_path) or os.path.getsize(zip_path) == 0:
-            raise FileNotFoundError(f"Downloaded file {zip_path} is missing or empty")
-        
-        # Extract the zip file
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall("models/")
-        
-        # Clean up
-        if os.path.exists(zip_path):
-            os.remove(zip_path)
-        
-        st.success("Vosk model downloaded successfully!")
-        st.rerun()  # Reload to continue with the app
-        
-    except Exception as e:
-        st.warning(f"Could not download Vosk model: {e}")
-        st.info("The app will continue, but transcription features may not work until the model is downloaded.")
-        # Don't stop the app, just continue without the model
+    # Check if download is in progress
+    if "model_downloading" not in st.session_state:
+        st.session_state["model_downloading"] = True
+        try:
+            url = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+            zip_path = "vosk.zip"
+            
+            # Create models directory if it doesn't exist
+            os.makedirs("models", exist_ok=True)
+            
+            # Download the model
+            with st.spinner("Downloading Vosk model (this may take a moment)..."):
+                response = requests.get(url, timeout=60)
+                response.raise_for_status()  # Raise an error for bad status codes
+                
+                # Write the zip file
+                with open(zip_path, "wb") as f:
+                    f.write(response.content)
+                
+                # Verify the file exists and has content
+                if not os.path.exists(zip_path) or os.path.getsize(zip_path) == 0:
+                    raise FileNotFoundError(f"Downloaded file {zip_path} is missing or empty")
+                
+                # Extract the zip file
+                with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                    zip_ref.extractall("models/")
+                
+                # Clean up
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+            
+            # Verify extraction worked - check for the actual extracted folder name
+            if os.path.exists(MODEL_DIR):
+                st.session_state["model_downloading"] = False
+                st.success("✅ Vosk model downloaded successfully!")
+            else:
+                # Check if any model folder was created
+                model_folders = [d for d in os.listdir("models") if os.path.isdir(os.path.join("models", d)) and "vosk" in d.lower()]
+                if model_folders:
+                    st.session_state["model_downloading"] = False
+                    st.success(f"✅ Vosk model downloaded successfully! (found in {model_folders[0]})")
+                else:
+                    raise FileNotFoundError("Model directory was not created after extraction")
+                
+        except Exception as e:
+            st.session_state["model_downloading"] = False
+            st.warning(f"⚠️ Could not download Vosk model: {e}")
+            st.info("ℹ️ The app will continue, but transcription features may not work until the model is downloaded.")
+            # Don't stop the app, just continue without the model
 
 # -----------------------------
 # 1. LOAD FIREBASE ADMIN JSON
