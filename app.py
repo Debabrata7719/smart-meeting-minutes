@@ -138,194 +138,143 @@ def verify_token():
 # 5. GOOGLE LOGIN COMPONENT
 # -----------------------------
 def google_login_button():
-    # Inject Firebase scripts and auth logic directly into the page (not in iframe)
+    # Use st.components.v1.html which actually executes JavaScript
+    # Access parent window to avoid iframe restrictions
     firebase_config_json = json.dumps(firebase_config)
     
-    # Always load scripts and handle redirect - this ensures it works on every page load
-    # Use a unique key to force reload on every render
-    import time
-    unique_key = int(time.time() * 1000)
-    
-    st.markdown(f"""
-    <script>
-        console.log('=== FIREBASE AUTH SCRIPT STARTING ===');
+    # Combined HTML with Firebase and button
+    combined_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    </head>
+    <body>
+        <button id="googleLoginBtn" style="padding:15px 25px;font-size:20px;border:none;background:#4285F4;color:white;border-radius:8px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);width:100%;max-width:300px;">
+            🔐 Sign in with Google
+        </button>
         
-        // Load Firebase scripts dynamically
-        function loadFirebaseScripts() {{
-            return new Promise((resolve, reject) => {{
-                if (window.firebase && window.firebase.apps) {{
-                    console.log('Firebase already loaded');
-                    resolve();
-                    return;
-                }}
-                
-                console.log('Loading Firebase scripts...');
-                const script1 = document.createElement('script');
-                script1.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
-                script1.onload = function() {{
-                    console.log('Firebase app script loaded');
-                    const script2 = document.createElement('script');
-                    script2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js';
-                    script2.onload = function() {{
-                        console.log('Firebase auth script loaded');
-                        resolve();
-                    }};
-                    script2.onerror = function() {{
-                        console.error('Failed to load Firebase auth script');
-                        reject(new Error('Failed to load Firebase auth'));
-                    }};
-                    document.head.appendChild(script2);
-                }};
-                script1.onerror = function() {{
-                    console.error('Failed to load Firebase app script');
-                    reject(new Error('Failed to load Firebase app'));
-                }};
-                document.head.appendChild(script1);
-            }});
-        }}
-        
-        // Function to handle redirect result
-        async function handleRedirectResult() {{
-            try {{
-                // Wait for Firebase to load
-                await loadFirebaseScripts();
-                
-                if (typeof firebase === 'undefined') {{
-                    console.error('Firebase is still undefined after loading scripts!');
-                    return;
-                }}
-                
-                const firebaseConfig = {firebase_config_json};
-                console.log('Firebase config:', firebaseConfig);
-                
-                // Initialize Firebase only if not already initialized
-                if (!firebase.apps.length) {{
-                    console.log('Initializing Firebase with config...');
-                    firebase.initializeApp(firebaseConfig);
-                    console.log('Firebase initialized successfully');
-                }} else {{
-                    console.log('Firebase already initialized');
-                }}
-                
-                const auth = firebase.auth();
-                console.log('=== Checking for redirect result ===');
-                
-                // Handle redirect result on EVERY page load (critical for redirect flow)
-                const result = await auth.getRedirectResult();
-                console.log('Redirect result received:', result);
-                
-                if (result.user) {{
-                    console.log('✅ User authenticated:', result.user.email);
-                    const token = await result.user.getIdToken();
-                    console.log('✅ Got token, adding to URL...');
-                    
-                    // Add token to URL and reload
-                    const currentUrl = new URL(window.location.href);
-                    currentUrl.searchParams.set('id_token', token);
-                    console.log('Redirecting to:', currentUrl.toString());
-                    window.location.href = currentUrl.toString();
-                }} else {{
-                    console.log('ℹ️ No user in redirect result - user may not have completed login yet');
-                }}
-            }} catch (error) {{
-                console.error("❌ Error in handleRedirectResult:", error);
-                if (error.code) {{
-                    console.error("Error code:", error.code);
-                    console.error("Error message:", error.message);
-                    if (error.code === 'auth/unauthorized-domain') {{
-                        console.error("⚠️ Your domain is not authorized in Firebase!");
-                    }} else if (error.code === 'auth/operation-not-allowed') {{
-                        console.error("⚠️ Google Sign-In is not enabled in Firebase!");
+        <script>
+            console.log('=== FIREBASE AUTH SCRIPT STARTING (in component) ===');
+            
+            // Try to access parent window, fallback to current window
+            const targetWindow = window.top !== window ? window.top : window;
+            const targetDoc = targetWindow.document;
+            
+            const firebaseConfig = {firebase_config_json};
+            
+            // Initialize Firebase in target window
+            function initFirebase() {{
+                try {{
+                    if (!targetWindow.firebase || !targetWindow.firebase.apps.length) {{
+                        console.log('Initializing Firebase in target window...');
+                        if (!targetWindow.firebase) {{
+                            // Load scripts in parent if needed
+                            const script1 = targetDoc.createElement('script');
+                            script1.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
+                            script1.onload = function() {{
+                                const script2 = targetDoc.createElement('script');
+                                script2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js';
+                                script2.onload = function() {{
+                                    targetWindow.firebase.initializeApp(firebaseConfig);
+                                    setupAuth();
+                                }};
+                                targetDoc.head.appendChild(script2);
+                            }};
+                            targetDoc.head.appendChild(script1);
+                        }} else {{
+                            targetWindow.firebase.initializeApp(firebaseConfig);
+                            setupAuth();
+                        }}
+                    }} else {{
+                        console.log('Firebase already initialized');
+                        setupAuth();
                     }}
+                }} catch (e) {{
+                    console.error('Error initializing Firebase:', e);
+                    // Fallback: use current window
+                    if (!firebase.apps.length) {{
+                        firebase.initializeApp(firebaseConfig);
+                    }}
+                    setupAuthCurrent();
                 }}
             }}
-        }}
-        
-        // Start handling redirect when page loads
-        console.log('Setting up redirect handler...');
-        if (document.readyState === 'loading') {{
-            document.addEventListener('DOMContentLoaded', function() {{
-                console.log('DOM loaded, starting redirect handler...');
-                handleRedirectResult();
-            }});
-        }} else {{
-            console.log('DOM already loaded, starting redirect handler immediately...');
-            handleRedirectResult();
-        }}
-        
-        // Also try after a delay to catch any edge cases
-        setTimeout(function() {{
-            console.log('Retrying redirect handler after delay...');
-            handleRedirectResult();
-        }}, 1000);
-        
-        console.log('=== FIREBASE AUTH SCRIPT LOADED ===');
-    </script>
-    """, unsafe_allow_html=True)
-    
-    # Create the login button
-    st.markdown("""
-    <style>
-        .google-login-btn {
-            padding: 15px 25px;
-            font-size: 20px;
-            border: none;
-            background: #4285F4;
-            color: white;
-            border-radius: 8px;
-            cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            width: 100%;
-            max-width: 300px;
-            margin: 10px 0;
-        }
-        .google-login-btn:hover {
-            background: #357ae8;
-        }
-    </style>
-    <button id="googleLoginBtn" class="google-login-btn">
-        🔐 Sign in with Google
-    </button>
-    <script>
-        (function() {{
-            function setupButton() {{
-                const btn = document.getElementById('googleLoginBtn');
-                if (!btn) {{
-                    setTimeout(setupButton, 100);
-                    return;
-                }}
+            
+            function setupAuth() {{
+                const auth = targetWindow.firebase.auth();
                 
-                // Remove any existing listeners
-                const newBtn = btn.cloneNode(true);
-                btn.parentNode.replaceChild(newBtn, btn);
+                // Handle redirect result
+                auth.getRedirectResult()
+                    .then(async (result) => {{
+                        console.log('Redirect result:', result);
+                        if (result.user) {{
+                            const token = await result.user.getIdToken();
+                            const currentUrl = new URL(targetWindow.location.href);
+                            currentUrl.searchParams.set('id_token', token);
+                            targetWindow.location.href = currentUrl.toString();
+                        }}
+                    }})
+                    .catch((error) => {{
+                        if (error.code && !['auth/popup-closed-by-user'].includes(error.code)) {{
+                            console.error('Redirect result error:', error);
+                        }}
+                    }});
                 
-                newBtn.addEventListener('click', function() {{
-                    if (typeof firebase === 'undefined') {{
-                        alert('Firebase is loading, please wait a moment and try again.');
-                        return;
-                    }}
-                    
-                    console.log('Login button clicked, initiating redirect...');
-                    const provider = new firebase.auth.GoogleAuthProvider();
-                    firebase.auth().signInWithRedirect(provider)
-                        .then(() => {{
-                            console.log('Redirect initiated');
-                        }})
+                // Setup button
+                document.getElementById('googleLoginBtn').addEventListener('click', function() {{
+                    const provider = new targetWindow.firebase.auth.GoogleAuthProvider();
+                    auth.signInWithRedirect(provider)
                         .catch((error) => {{
-                            console.error("Redirect error:", error);
-                            alert("Login failed: " + error.message);
+                            console.error('Redirect error:', error);
+                            alert('Login failed: ' + error.message);
                         }});
                 }});
             }}
             
-            if (document.readyState === 'loading') {{
-                document.addEventListener('DOMContentLoaded', setupButton);
-            }} else {{
-                setupButton();
+            function setupAuthCurrent() {{
+                const auth = firebase.auth();
+                
+                auth.getRedirectResult()
+                    .then(async (result) => {{
+                        if (result.user) {{
+                            const token = await result.user.getIdToken();
+                            const currentUrl = new URL(window.location.href);
+                            currentUrl.searchParams.set('id_token', token);
+                            window.top.location.href = currentUrl.toString();
+                        }}
+                    }})
+                    .catch((error) => {{
+                        if (error.code && !['auth/popup-closed-by-user'].includes(error.code)) {{
+                            console.error('Redirect result error:', error);
+                        }}
+                    }});
+                
+                document.getElementById('googleLoginBtn').addEventListener('click', function() {{
+                    const provider = new firebase.auth.GoogleAuthProvider();
+                    auth.signInWithRedirect(provider)
+                        .catch((error) => {{
+                            console.error('Redirect error:', error);
+                            alert('Login failed: ' + error.message);
+                        }});
+                }});
             }}
-        }})();
-    </script>
-    """, unsafe_allow_html=True)
+            
+            // Wait for Firebase to load, then initialize
+            if (typeof firebase !== 'undefined') {{
+                initFirebase();
+            }} else {{
+                window.addEventListener('load', function() {{
+                    setTimeout(initFirebase, 500);
+                }});
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    
+    # Use components.v1.html which actually executes JavaScript
+    st.components.v1.html(combined_html, height=100)
 
 # -----------------------------
 # 6. LOGOUT FUNCTION
