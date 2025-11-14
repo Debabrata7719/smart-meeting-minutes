@@ -32,7 +32,7 @@ if "firebase_initialized" not in st.session_state:
 
         cred = credentials.Certificate(firebase_dict)
 
-        # FIX: Prevent duplicate initialization
+        # Prevent double initialization
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
 
@@ -42,6 +42,7 @@ if "firebase_initialized" not in st.session_state:
     except Exception as e:
         st.error(f"Firebase initialization failed: {e}")
         st.stop()
+
 
 db = st.session_state["db"]
 
@@ -57,53 +58,60 @@ firebase_config = {
   "appId": "1:802600624072:web:8b750e4a032df825d2aafd"
 }
 
-APP_URL = "https://smart-meeting-minutes.streamlit.app/"
-
 # -----------------------------
 # 3. GOOGLE LOGIN HTML
 # -----------------------------
 def google_login_button():
-    login_html = f"""
+    st.markdown("""
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    """, unsafe_allow_html=True)
 
-    <script>
-        const firebaseConfig = {json.dumps(firebase_config)};
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
+    login_html = f"""
+        <script>
+            const firebaseConfig = {json.dumps(firebase_config)};
+            if (!firebase.apps.length) {{
+                firebase.initializeApp(firebaseConfig);
+            }}
+            const auth = firebase.auth();
 
-        function googleLogin() {{
-            const provider = new firebase.auth.GoogleAuthProvider();
-            auth.signInWithPopup(provider).then(async (result) => {{
-                const token = await result.user.getIdToken();
-                const params = new URLSearchParams();
-                params.set("id_token", token);
+            function googleLogin() {{
+                const provider = new firebase.auth.GoogleAuthProvider();
+                auth.signInWithPopup(provider).then(async (result) => {{
+                    const token = await result.user.getIdToken();
+                    const params = new URLSearchParams();
+                    params.set("id_token", token);
 
-                // Redirect to same domain (local or Streamlit Cloud)
-                window.location.href = window.location.origin + "/?" + params.toString();
-            }});
-        }}
-    </script>
+                    // Redirect properly on Streamlit
+                    window.location.href = window.location.origin + "/?" + params.toString();
+                }}).catch((err) => {{
+                    alert("Login failed: " + err.message);
+                }});
+            }}
+        </script>
 
-    <button onclick="googleLogin()"
-        style="padding:15px 25px;font-size:20px;border:none;background:#4285F4;color:white;border-radius:8px;cursor:pointer;">
-        🔐 Sign in with Google
-    </button>
+        <button onclick="googleLogin()"
+            style="padding:15px 25px;font-size:20px;border:none;background:#4285F4;color:white;border-radius:8px;cursor:pointer;">
+            🔐 Sign in with Google
+        </button>
     """
     st.markdown(login_html, unsafe_allow_html=True)
-
 
 # -----------------------------
 # 4. VERIFY LOGIN TOKEN
 # -----------------------------
 def verify_token():
-    if "id_token" in st.query_params:
-        token = st.query_params["id_token"]
+    query = st.experimental_get_query_params()
+
+    if "id_token" in query:
+        token = query["id_token"][0]
         try:
             user = auth.verify_id_token(token)
             return user
-        except:
+        except Exception as e:
+            st.error("Token verification failed: " + str(e))
             return None
+
     return None
 
 # -----------------------------
