@@ -361,6 +361,49 @@ if st.session_state["user"] is None:
         (Firebase Console → Authentication → Settings → Authorized domains)
         """)
     
+    # Firebase Configuration Checker
+    st.markdown("---")
+    st.subheader("🔧 Firebase Configuration Check")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**Current Firebase Config:**")
+        st.code(f"""
+        Project ID: {firebase_config['projectId']}
+        Auth Domain: {firebase_config['authDomain']}
+        """)
+    
+    with col2:
+        st.write("**Required Setup:**")
+        st.markdown("""
+        1. ✅ Go to [Firebase Console](https://console.firebase.google.com/)
+        2. ✅ Select project: **landing-page-for-meeting-app**
+        3. ✅ Authentication → Settings → Authorized domains
+        4. ✅ Add: **smart-meeting-minutes.streamlit.app**
+        5. ✅ Authentication → Sign-in method → Enable Google
+        """)
+    
+    # Quick test link
+    st.info("""
+    **Quick Test:** If login still doesn't work, try this:
+    1. Open browser console (F12) before clicking login
+    2. Look for any red error messages
+    3. Check if you see "=== FIREBASE AUTH SCRIPT STARTING ===" in console
+    4. If you don't see Firebase logs, the scripts aren't loading
+    """)
+    
+    # Simple JavaScript test
+    st.markdown("""
+    <div id="js-test" style="padding:10px;background:#e8f5e9;border-radius:5px;margin:10px 0;">
+        <strong>JavaScript Test:</strong> <span id="js-result">Testing...</span>
+    </div>
+    <script>
+        document.getElementById('js-result').textContent = '✅ JavaScript is working!';
+        console.log('✅ JavaScript test passed - scripts are executing');
+    </script>
+    """, unsafe_allow_html=True)
+    
     google_login_button()
     
     # Debug info (can be removed in production)
