@@ -27,17 +27,15 @@ if not os.path.exists(MODEL_DIR):
 # -----------------------------
 if "firebase_initialized" not in st.session_state:
     try:
-        # Get json string from secrets
         firebase_json = st.secrets["FIREBASE_ADMIN_JSON_CONTENT"]
-
-        # Convert to Python dict
         firebase_dict = json.loads(firebase_json)
 
-        # Initialize Firebase Admin
         cred = credentials.Certificate(firebase_dict)
-        firebase_admin.initialize_app(cred)
 
-        # Save Firestore client
+        # FIX: Prevent duplicate initialization
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
+
         st.session_state["db"] = firestore.client()
         st.session_state["firebase_initialized"] = True
 
@@ -94,7 +92,7 @@ def google_login_button():
     """
     st.markdown(login_html, unsafe_allow_html=True)
 
-    
+
 # -----------------------------
 # 4. VERIFY LOGIN TOKEN
 # -----------------------------
