@@ -97,84 +97,80 @@ def verify_token():
 # 5. GOOGLE LOGIN COMPONENT
 # -----------------------------
 def google_login_button():
-    # Load Firebase scripts in the head only once
-    if "firebase_loaded" not in st.session_state:
-        st.session_state["firebase_loaded"] = True
+    # Inject Firebase scripts and auth logic directly into the page (not in iframe)
+    firebase_config_json = json.dumps(firebase_config)
     
-    login_html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
+    # Load Firebase scripts in the main page context
+    if "firebase_scripts_loaded" not in st.session_state:
+        st.session_state["firebase_scripts_loaded"] = True
+        st.markdown(f"""
         <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
         <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-    </head>
-    <body>
-        <button id="googleLoginBtn"
-            style="padding:15px 25px;font-size:20px;border:none;background:#4285F4;color:white;border-radius:8px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);">
-            🔐 Sign in with Google
-        </button>
-
         <script>
-            const firebaseConfig = {json.dumps(firebase_config)};
-            
-            // Initialize Firebase only if not already initialized
-            if (!firebase.apps.length) {{
+            // Initialize Firebase in the main window context
+            const firebaseConfig = {firebase_config_json};
+            if (typeof firebase !== 'undefined' && !firebase.apps.length) {{
                 firebase.initializeApp(firebaseConfig);
             }}
             
-            const auth = firebase.auth();
-            
-            // Handle the redirect result on page load (in case user is returning from Google OAuth)
-            auth.getRedirectResult()
-                .then(async (result) => {{
-                    if (result.user) {{
-                        const token = await result.user.getIdToken();
-                        
-                        // Redirect with token
-                        const currentUrl = new URL(window.location.href);
-                        currentUrl.searchParams.set('id_token', token);
-                        window.location.href = currentUrl.toString();
-                    }}
-                }})
-                .catch((error) => {{
-                    // Only show error if it's not a user cancellation
-                    if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {{
-                        console.error("Redirect result error:", error);
-                    }}
-                }});
-
-            document.getElementById('googleLoginBtn').addEventListener('click', function() {{
-                const provider = new firebase.auth.GoogleAuthProvider();
-                
-                // Try popup first (better UX), fallback to redirect if blocked
-                auth.signInWithPopup(provider)
+            // Handle redirect result on page load
+            if (typeof firebase !== 'undefined') {{
+                firebase.auth().getRedirectResult()
                     .then(async (result) => {{
-                        const token = await result.user.getIdToken();
-                        
-                        // Redirect with token
-                        const currentUrl = new URL(window.location.href);
-                        currentUrl.searchParams.set('id_token', token);
-                        window.location.href = currentUrl.toString();
+                        if (result.user) {{
+                            const token = await result.user.getIdToken();
+                            const currentUrl = new URL(window.location.href);
+                            currentUrl.searchParams.set('id_token', token);
+                            window.location.href = currentUrl.toString();
+                        }}
                     }})
                     .catch((error) => {{
-                        // If popup is blocked, use redirect
-                        if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {{
-                            auth.signInWithRedirect(provider)
-                                .catch((redirectError) => {{
-                                    console.error("Redirect error:", redirectError);
-                                    alert("Login failed: " + redirectError.message);
-                                }});
-                        }} else {{
-                            console.error("Login error:", error);
-                            alert("Login failed: " + error.message);
+                        if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {{
+                            console.error("Redirect result error:", error);
                         }}
                     }});
-            }});
+            }}
         </script>
-    </body>
-    </html>
-    """
-    st.components.v1.html(login_html, height=100)
+        """, unsafe_allow_html=True)
+    
+    # Create the login button
+    st.markdown("""
+    <style>
+        .google-login-btn {
+            padding: 15px 25px;
+            font-size: 20px;
+            border: none;
+            background: #4285F4;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 300px;
+        }
+        .google-login-btn:hover {
+            background: #357ae8;
+        }
+    </style>
+    <button id="googleLoginBtn" class="google-login-btn">
+        🔐 Sign in with Google
+    </button>
+    <script>
+        document.getElementById('googleLoginBtn').addEventListener('click', function() {
+            if (typeof firebase === 'undefined') {
+                alert('Firebase is loading, please wait a moment and try again.');
+                return;
+            }
+            
+            const provider = new firebase.auth.GoogleAuthProvider();
+            firebase.auth().signInWithRedirect(provider)
+                .catch((error) => {
+                    console.error("Redirect error:", error);
+                    alert("Login failed: " + error.message);
+                });
+        });
+    </script>
+    """, unsafe_allow_html=True)
 
 # -----------------------------
 # 6. LOGOUT FUNCTION
@@ -202,9 +198,12 @@ if st.session_state["user"] is None:
     with st.expander("ℹ️ Login Instructions"):
         st.write("""
         1. Click the "Sign in with Google" button below
-        2. If a popup is blocked, allow popups for this site and try again
+        2. You will be redirected to Google for authentication
         3. Complete the Google sign-in process
-        4. You will be redirected back automatically
+        4. You will be redirected back to the app automatically
+        
+        **Note:** Make sure your Streamlit app URL is added to Firebase Authorized domains
+        (Firebase Console → Authentication → Settings → Authorized domains)
         """)
     
     google_login_button()
