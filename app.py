@@ -108,19 +108,32 @@ if "user" not in st.session_state:
 # 4. VERIFY LOGIN TOKEN
 # -----------------------------
 def verify_token():
+    # First check if user is already logged in (persists across reruns)
+    if st.session_state.get("user") is not None:
+        # User is already logged in, just clear any token from URL if present
+        if "id_token" in st.query_params:
+            try:
+                params_dict = dict(st.query_params)
+                params_dict.pop("id_token", None)
+                st.query_params.clear()
+                for k, v in params_dict.items():
+                    if v:
+                        st.query_params[k] = v
+            except:
+                st.query_params["id_token"] = ""
+        return True
+    
     # Check for token in query parameters
     if "id_token" in st.query_params:
         token = st.query_params["id_token"]
         if token:  # Make sure token is not empty
             try:
                 user = auth.verify_id_token(token)
+                # Set user in session state - this persists across reruns
                 st.session_state["user"] = user
-                # Clear the token from URL by setting it to empty
-                # This prevents the token from appearing in the URL
-                st.query_params["id_token"] = ""
-                # Remove it completely if possible
+                # Clear the token from URL by removing it
                 try:
-                    # Try to remove the parameter (works in newer Streamlit versions)
+                    # Remove the parameter from URL
                     params_dict = dict(st.query_params)
                     params_dict.pop("id_token", None)
                     st.query_params.clear()
@@ -129,8 +142,11 @@ def verify_token():
                             st.query_params[k] = v
                 except:
                     # Fallback: just set to empty string
-                    pass
+                    st.query_params["id_token"] = ""
+                # Rerun to refresh the page without token in URL
+                # After rerun, user will be in session state, so login check will pass
                 st.rerun()
+                return True
             except Exception as e:
                 error_msg = str(e)
                 st.error(f"❌ Token verification failed: {error_msg}")
@@ -139,6 +155,18 @@ def verify_token():
                 elif "invalid" in error_msg.lower():
                     st.warning("Invalid token. Please try logging in again.")
                 st.session_state["user"] = None
+                # Clear the invalid token from URL
+                try:
+                    params_dict = dict(st.query_params)
+                    params_dict.pop("id_token", None)
+                    st.query_params.clear()
+                    for k, v in params_dict.items():
+                        if v:
+                            st.query_params[k] = v
+                except:
+                    st.query_params["id_token"] = ""
+                return False
+    return None  # No token found and user not logged in
 
 # -----------------------------
 # 5. GOOGLE LOGIN COMPONENT
@@ -439,17 +467,11 @@ st.markdown(f"""
 </script>
 """, unsafe_allow_html=True)
 
-# Check for token in URL on page load
-# Also check for Firebase auth parameters in URL
-if "id_token" not in st.query_params:
-    # Check if there are any Firebase-related params that might indicate a redirect
-    url_params = dict(st.query_params)
-    # Firebase sometimes adds these params on redirect
-    if any(key.startswith('firebase') or 'auth' in key.lower() for key in url_params.keys()):
-        st.info("🔍 Detected Firebase redirect parameters. Processing...")
-        st.rerun()
+# Verify token first - this handles authentication
+token_result = verify_token()
 
-verify_token()
+# If token was just verified and rerun was triggered, the function will have already set user state
+# After rerun, verify_token() will return None (no token) but user should be in session state
 
 # Check if user is logged in
 if st.session_state["user"] is None:
