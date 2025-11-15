@@ -108,10 +108,13 @@ if "user" not in st.session_state:
 # 4. VERIFY LOGIN TOKEN
 # -----------------------------
 def verify_token():
-    # First check if user is already logged in (persists across reruns)
-    if st.session_state.get("user") is not None:
-        # User is already logged in, just clear any token from URL if present
-        if "id_token" in st.query_params:
+    # IMPORTANT: Check if user is already logged in FIRST (before any token processing)
+    # This must be the first check to prevent logout on reruns
+    current_user = st.session_state.get("user")
+    if current_user is not None and current_user != {} and isinstance(current_user, dict) and current_user.get("uid"):
+        # User is already logged in - this is the normal state after successful login
+        # Just clear any leftover token from URL if present (shouldn't happen, but safety check)
+        if "id_token" in st.query_params and st.query_params["id_token"]:
             try:
                 params_dict = dict(st.query_params)
                 params_dict.pop("id_token", None)
@@ -120,31 +123,45 @@ def verify_token():
                     if v:
                         st.query_params[k] = v
             except:
-                st.query_params["id_token"] = ""
+                pass
         return True
     
+    # Only process token if user is NOT already logged in
     # Check for token in query parameters
     if "id_token" in st.query_params:
-        token = st.query_params["id_token"]
-        if token:  # Make sure token is not empty
+        token = st.query_params.get("id_token")
+        if token and token.strip():  # Make sure token is not empty
             try:
+                # Verify the token with Firebase
                 user = auth.verify_id_token(token)
-                # Set user in session state - this persists across reruns
+                
+                # CRITICAL: Set user in session state FIRST
+                # This MUST happen before any reruns or query param modifications
                 st.session_state["user"] = user
-                # Clear the token from URL by removing it
+                
+                # Also store a flag to indicate successful login
+                st.session_state["login_successful"] = True
+                
+                # Clear the token from URL by modifying query params
+                # Do this AFTER setting user state
                 try:
-                    # Remove the parameter from URL
-                    params_dict = dict(st.query_params)
-                    params_dict.pop("id_token", None)
+                    current_params = dict(st.query_params)
+                    current_params.pop("id_token", None)
+                    # Clear all params first
                     st.query_params.clear()
-                    for k, v in params_dict.items():
-                        if v:  # Only add non-empty params
+                    # Then add back only non-token params
+                    for k, v in current_params.items():
+                        if v:
                             st.query_params[k] = v
-                except:
-                    # Fallback: just set to empty string
-                    st.query_params["id_token"] = ""
-                # Rerun to refresh the page without token in URL
-                # After rerun, user will be in session state, so login check will pass
+                except Exception as e:
+                    # If clearing fails, at least try to set to empty
+                    try:
+                        st.query_params["id_token"] = ""
+                    except:
+                        pass
+                
+                # Force a rerun to refresh the page
+                # The user state is already saved, so after rerun it will persist
                 st.rerun()
                 return True
             except Exception as e:
@@ -166,6 +183,7 @@ def verify_token():
                 except:
                     st.query_params["id_token"] = ""
                 return False
+    
     return None  # No token found and user not logged in
 
 # -----------------------------
@@ -468,13 +486,24 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # Verify token first - this handles authentication
+# This function checks for tokens in URL and verifies them, setting user in session state
 token_result = verify_token()
 
-# If token was just verified and rerun was triggered, the function will have already set user state
-# After rerun, verify_token() will return None (no token) but user should be in session state
+# Debug: Log the state for troubleshooting (can be removed later)
+if st.checkbox("🔍 Debug Authentication State", key="debug_auth"):
+    st.write("**Session State Keys:**", list(st.session_state.keys()))
+    st.write("**User State:**", "Logged In" if st.session_state.get("user") else "Not Logged In")
+    if st.session_state.get("user"):
+        st.write("**User Email:**", st.session_state["user"].get("email", "N/A"))
+    st.write("**Token in URL:**", "Yes" if "id_token" in st.query_params else "No")
+    st.write("**Verify Token Result:**", token_result)
 
 # Check if user is logged in
-if st.session_state["user"] is None:
+# Use the same robust check as in verify_token()
+current_user = st.session_state.get("user")
+is_logged_in = current_user is not None and current_user != {} and isinstance(current_user, dict) and current_user.get("uid")
+
+if not is_logged_in:
     st.title("🔐 Login Required")
     st.write("Please sign in to use Smart Meeting Minutes.")
     
