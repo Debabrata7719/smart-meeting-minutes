@@ -1,277 +1,128 @@
-<<<<<<< HEAD
-# 🎙️ Smart Meeting Minutes
+# 🎙️ Smart Meeting Minutes API
 
-An intelligent offline tool that transforms meeting recordings into structured summaries and actionable highlights. No API keys required - everything runs locally on your machine.
+FastAPI backend for processing meeting recordings, managing users, and serving protected resources via JWT authentication.
 
 ## ✨ Features
 
-- **Offline Transcription**: Uses Vosk for speech-to-text conversion (no internet required)
-- **AI-Powered Summarization**: Generates concise meeting summaries using Hugging Face Transformers
-- **Smart Highlights Extraction**: Automatically identifies and categorizes important topics, decisions, and action items
-- **Multi-language Support**: Transcribe English or Hindi audio
-- **Context-Aware Extraction**: Captures full context around important statements, not just keywords
-- **Efficient Processing**: Streaming transcription with real-time progress tracking
+- Offline transcription powered by Vosk and custom NLP utilities (see `src/transcripter/`).
+- Manual authentication system backed by MongoDB + bcrypt + jose JWT tokens.
+- Modular `auth/` package that cleanly separates database access, hashing, token utilities, and routes.
+- Protected routes using the `Authorization` header (`Authorization: <token>` or `Authorization: Bearer <token>`).
 
-## 📋 Requirements
+## 📦 Requirements
 
-- Python 3.8+
-- ffmpeg (for audio processing)
-- Required Python packages (see `requirements.txt`)
+- Python 3.10+
+- Local MongoDB running at `mongodb://localhost:27017`
+- ffmpeg (for the transcription utilities)
+- Python dependencies listed in `requirements.txt`
 
-### Installing Dependencies
+Install everything with:
 
 ```bash
-# Install Python packages (includes Streamlit)
 pip install -r requirements.txt
-
-# For summarization (optional but recommended)
-pip install transformers torch
-
-# Install ffmpeg
-# Windows: winget install ffmpeg
-# macOS: brew install ffmpeg
-# Linux: sudo apt-get install ffmpeg
 ```
 
-**Note:** Streamlit is included in `requirements.txt` for the web interface.
-
-## 🚀 Quick Start
-
-### Web Interface (Recommended)
-
-Launch the Streamlit web interface for an easy-to-use GUI:
+## 🚀 Running the API
 
 ```bash
-streamlit run app.py
+uvicorn app:app --reload
+# or use the helper scripts
+./run.sh            # macOS/Linux
+run.bat             # Windows
 ```
 
-This will open your browser automatically. You can:
-- Upload audio/video files via drag-and-drop
-- Select language and options
-- View results in the browser
-- Download summary and highlights files
+The server starts on `http://127.0.0.1:8000` by default.
 
-### Command Line Interface
+## 🔐 Authentication Endpoints
 
-Alternatively, use the command-line interface:
+All auth endpoints live under `/auth`:
+
+| Method | Route             | Description                            |
+|--------|------------------|----------------------------------------|
+| POST   | `/auth/register` | Create a new user (email + password)   |
+| POST   | `/auth/login`    | Verify credentials, returns JWT token  |
+| GET    | `/auth/profile`  | Requires token, returns current user id |
+
+Usage example (with `httpie`):
 
 ```bash
-# Process a meeting audio/video file
-python -m src.transcripter.cli "path/to/meeting.mp4"
+# Register
+http POST :8000/auth/register email=jane@example.com password=SuperSecret123
+
+# Login
+http POST :8000/auth/login email=jane@example.com password=SuperSecret123
+# => {"access_token": "...", "token_type": "bearer"}
+
+# Access profile
+http GET :8000/auth/profile "Authorization: <token>"
 ```
 
-This will generate:
-- `meeting_summary.txt` - Concise summary of the meeting
-- `meeting_highlights.txt` - Structured highlights with categorized important topics
+## 🔒 Test Protected Route
 
-### Advanced CLI Usage
+The root FastAPI app also exposes `/test-protected` to verify JWT handling:
 
 ```bash
-# Hindi transcription with English translation
-python -m src.transcripter.cli meeting.mp3 --language hi --translate
-
-# Skip summarization (only generate highlights)
-python -m src.transcripter.cli meeting.mp3 --skip-summary
-
-# Custom output directory
-python -m src.transcripter.cli meeting.mp3 --outdir my_outputs
-
-# Disable progress updates
-python -m src.transcripter.cli meeting.mp3 --no-progress
+http GET :8000/test-protected "Authorization: <token>"
+# => {"message": "Authorized access", "user_id": "<mongodb id>"}
 ```
 
-## 📂 Output Files
+## 🧠 AI Routes (Transcription + Summaries)
 
-### `{filename}_summary.txt`
-A concise, AI-generated summary of the entire meeting. Perfect for quick overviews.
+Protected endpoints under `/ai` provide offline transcription and summarization:
 
-### `{filename}_highlights.txt`
-Well-structured highlights organized by categories:
+| Method | Route         | Description                                  |
+|--------|---------------|----------------------------------------------|
+| GET    | `/ai/check`   | Quick health-check (requires JWT)            |
+| POST   | `/ai/upload`  | Upload mp3/wav, returns transcript+summary   |
 
-- **Key Decisions & Actions**: Important decisions, agreements, and action items
-- **Financial Metrics**: Revenue, profit, costs, budgets, pricing
-- **Growth & Business**: Market expansion, sales, deals, contracts
-- **Customer & Users**: Customer metrics, retention, churn
-- **Planning & Forecasting**: Forecasts and future planning
-- **Operations & Team**: Hiring, headcount, team updates
-
-Each highlight includes full context, making it easy to understand what was discussed.
-
-## 🛠️ How It Works
-
-1. **Audio Processing**: Converts input audio/video to mono 16kHz WAV format using ffmpeg
-2. **Transcription**: Uses Vosk offline speech recognition model to convert speech to text
-3. **Analysis**: Extracts important topics using intelligent pattern matching and context detection
-4. **Summarization**: Generates concise summary using Hugging Face Transformers models
-5. **Structuring**: Organizes highlights into categorized, readable format
-
-## 🌍 Language Support
-
-- **English** (default): Full support for transcription and summarization
-- **Hindi**: Transcription support with optional English translation
-
-### Language Examples
+Example:
 
 ```bash
-# English (default)
-python -m src.transcripter.cli meeting.mp3
-
-# Hindi transcription
-python -m src.transcripter.cli meeting.mp3 --language hi
-
-# Hindi with English translation
-python -m src.transcripter.cli meeting.mp3 --language hi --translate
+http POST :8000/ai/upload \
+  "Authorization: <token>" \
+  file@sample.mp3
 ```
 
-## 📝 Command Line Options
+Responses include both the raw transcript (from the local Vosk model) and a summary generated with `t5-small`.
+
+## 🧱 Project Structure
 
 ```
-positional arguments:
-  input                 Path to input audio file (.mp3/.wav/.mp4/etc)
-
-optional arguments:
-  --outdir OUTDIR       Directory to write output files (default: outputs)
-  --skip-summary        Skip summarization, only generate highlights
-  --language {en,hi}    Language of the audio (default: en)
-  --translate           Translate Hindi transcript to English
-  --no-streaming        Disable streaming transcription
-  --no-progress         Disable progress updates
-  --timestamps          Include timestamps in processing (for internal use)
-  --reuse-transcript    Use existing transcript file instead of audio
-  --important-only      Extract only sentences with important keywords
+app.py                # FastAPI application entry-point
+auth/
+  ├─ database.py      # MongoDB client + collections
+  ├─ hash.py          # bcrypt helpers
+  ├─ models.py        # Pydantic request models
+  ├─ routes.py        # Auth router (register/login/profile)
+  └─ token.py         # JWT creation/verification
+ai/
+  ├─ transcriber.py   # Local Vosk-based transcription helpers
+  ├─ summarizer.py    # Local Hugging Face summarization helpers
+  └─ routes.py        # Protected upload/check endpoints
+src/transcripter/     # Existing transcription & NLP utilities
 ```
 
-## 🎯 Use Cases
+## 🧠 Transcription Utilities
 
-- **Team Meetings**: Quickly capture decisions and action items
-- **Client Calls**: Generate summaries for follow-up
-- **Conference Calls**: Extract key points from long discussions
-- **Interviews**: Summarize important responses and topics
-- **Training Sessions**: Create structured notes from recordings
+The CLI pipeline for transcription/summarization remains available:
 
-## 🔧 Technical Details
-
-### Core Technologies
-
-- **ffmpeg**: Audio/video preprocessing and format conversion
-- **Vosk**: Offline speech-to-text recognition
-- **Hugging Face Transformers**: Text summarization and translation
-- **Python 3.8+**: Core runtime
-
-### Model Downloads
-
-Vosk models are automatically downloaded on first use:
-- English: `vosk-model-small-en-us-0.15` (~40MB)
-- Hindi: `vosk-model-hi-0.22` (~1.5GB)
-
-Models are cached in the `models/` directory for future use.
-
-## 📊 Example Output
-
-### Summary (`meeting_summary.txt`)
-```
-The meeting discussed quarterly performance metrics, with revenue 
-increasing by 15%. The team agreed to expand into new markets 
-and approved a budget increase of 20% for next quarter...
+```bash
+python -m src.transcripter.cli path/to/audio.mp3 --outdir outputs
 ```
 
-### Highlights (`meeting_highlights.txt`)
-```
-======================================================================
-MEETING HIGHLIGHTS
-======================================================================
+Refer to the module docstrings under `src/transcripter/` for full details on highlights, summaries, PDF export, and translations.
 
-KEY DECISIONS & ACTIONS
-----------------------------------------------------------------------
-  1. We decided to increase the budget by 20% for next quarter. The team agreed this is necessary for expansion.
-  2. We will launch the new product next month. Marketing needs to prepare the campaign by next week.
+## 🧪 Verify Setup
 
-FINANCIAL METRICS
-----------------------------------------------------------------------
-  1. Revenue increased by 15% this quarter compared to last year.
-  2. We need to review the budget allocation for the upcoming projects.
-
-GROWTH & BUSINESS
-----------------------------------------------------------------------
-  1. The new market expansion plan is ready for implementation.
-  2. We closed three major deals this month worth $500k total.
-
-======================================================================
-Total Highlights: 6
-======================================================================
-```
+1. Start MongoDB locally (`brew services start mongodb-community` or similar).
+2. Install dependencies (`pip install -r requirements.txt`).
+3. Run the API (`uvicorn app:app --reload`).
+4. Exercise the auth routes with any HTTP client (curl, httpie, Postman).
 
 ## 🤝 Contributing
 
-Contributions are welcome! Feel free to open issues or submit pull requests.
+Contributions are welcome! Please open an issue or PR with improvement ideas.
 
 ## 📄 License
 
-This project is open source and available for personal and commercial use.
-
-## ⚠️ Notes
-
-- First run will download Vosk models (may take a few minutes)
-- Summarization requires `transformers` and `torch` packages
-- Large audio files may take time to process
-- All processing happens offline - no data is sent to external services
-
----
-
-
-=======
-🎙️ Meeting Transcription & Summarization
-
-This project is designed to transform raw meeting recordings into clear, structured notes without using any paid APIs.
-
-🔎 What It Does
-
-Full Meeting Transcription
-
-Takes an audio/video file as input (e.g., .mp3, .wav).
-
-Converts it into the right format (mono, 16kHz WAV).
-
-Transcribes the entire meeting speech to text using the offline Vosk model.
-
-Meeting Summarization
-
-Once transcription is complete, the text is passed to an open-source summarizer.
-
-Produces a clean, concise summary of the whole meeting.
-
-Scanning for Key Points
-
-The transcript is further scanned to extract highlights and important-only notes.
-
-This ensures the final output is not just text-heavy but also action-oriented.
-
-📂 Outputs Generated
-
-For a meeting file (say meeting.mp3), the system produces:
-
-meeting_transcript.txt → Full transcript of the meeting.
-
-meeting_summary.txt → Short, human-readable summary.
-
-meeting_highlights.txt → Key highlights (optional).
-
-meeting_important.txt → Only the most important points (optional with --important-only).
-
-🚀 Why This Project?
-
-Meetings are often long and repetitive.
-
-This tool saves time by:
-✅ Converting speech to text
-✅ Summarizing automatically
-✅ Highlighting only what matters most
-
-🛠️ Core Technologies
-
-ffmpeg → Audio preprocessing
-
-Vosk → Offline transcription
-
-Hugging Face Transformers → Text summarization
->>>>>>> 67535f896f9f9fbbe51cffa3b8a683a0dd025bc6
+This project is open source and free for personal or commercial use.

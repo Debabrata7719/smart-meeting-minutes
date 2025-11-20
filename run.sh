@@ -1,4 +1,3 @@
 #!/bin/bash
-echo "Starting Smart Meeting Minutes..."
-streamlit run app.py
-
+echo "Starting Smart Meeting Minutes API..."
+uvicorn app:app --reload
