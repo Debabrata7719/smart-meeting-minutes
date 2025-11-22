@@ -1,15 +1,14 @@
-from __future__ import annotations
-
+import os
 from pymongo import MongoClient
-from pymongo.collection import Collection
 
-MONGO_URI = "mongodb://localhost:27017"
-DB_NAME = "meeting_app"
-USERS_COLLECTION = "users"
+# Get MONGO_URI from environment (Render or local .env)
+MONGO_URI = os.getenv("MONGO_URI")
 
+# Connect to Atlas
 client = MongoClient(MONGO_URI)
-db = client[DB_NAME]
-users_collection: Collection = db[USERS_COLLECTION]
 
-# Ensure email uniqueness for fast lookups
-users_collection.create_index("email", unique=True)
+# Database name (you choose)
+db = client["meeting_app"]
+
+# Collections
+users_collection = db["users"]
