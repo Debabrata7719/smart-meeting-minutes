@@ -36,3 +36,7 @@ def test_protected(current_user: str = Depends(get_current_user)) -> dict[str, s
 		"message": "Authorized access",
 		"user_id": current_user,
 	}
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "message": "Backend is connected successfully ✅"}
