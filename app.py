@@ -6,6 +6,30 @@ from auth.routes import get_current_user
 from ai.routes import router as ai_router
 
 
+app = FastAPI()
+
+# --- CORS (important, we'll configure properly below) ---
+origins = [
+    "http://localhost:5173",                     # Vite dev
+    "https://smart-meeting-frontend.vercel.app", # your Vercel URL (change if different)
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- TEST ROUTES ---
+@app.get("/test")
+def test_backend():
+    return {"message": "Backend is running"}
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "message": "Backend is connected successfully ✅"}
 app = FastAPI(title="Smart Meeting Minutes API", version="1.0.0")
 
 app.add_middleware(
@@ -37,6 +61,3 @@ def test_protected(current_user: str = Depends(get_current_user)) -> dict[str, s
 		"user_id": current_user,
 	}
 
-@app.get("/api/health")
-def health():
-    return {"status": "ok", "message": "Backend is connected successfully ✅"}
